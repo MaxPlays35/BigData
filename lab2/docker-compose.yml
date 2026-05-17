@@ -35,7 +35,7 @@ services:
       - spark-data:/opt/spark/work-dir
 
   postgres:
-    image: postgres:latest
+    image: postgres:18-alpine
     container_name: postgres
     ports:
       - "5432:5432"
@@ -51,7 +51,7 @@ services:
       - ./sql:/docker-entrypoint-initdb.d/
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.4-alpine
     container_name: clickhouse
     ports:
       - "8123:8123"
