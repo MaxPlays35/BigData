@@ -1,0 +1,63 @@
+services:
+  spark-master:
+    image: apache/spark:4.0.0
+    container_name: spark-master
+    ports:
+      - "8080:8080"   # Spark Master web UI
+      - "7077:7077"   # Spark Master port
+      - "4040:4040"   # Spark application UI
+    environment:
+      - SPARK_MODE=master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    volumes:
+      - spark-data:/opt/spark/work-dir
+
+  spark-worker:
+    image: apache/spark:4.0.0
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    volumes:
+      - spark-data:/opt/spark/work-dir
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./data:/data
+      - ./sql:/docker-entrypoint-initdb.d/
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: reports
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: password
+
+
+
+  submit:
+    container_name: submitter
+    pull_policy: always
+    build:
+      dockerfile: Dockerfile
+
+volumes:
+  spark-data:
