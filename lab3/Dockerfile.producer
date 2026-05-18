@@ -7,7 +7,7 @@ COPY src src
 COPY common common
 COPY consumer consumer
 COPY producer producer
-RUN sbt consumer/assembly
+RUN sbt producer/assembly
 
 FROM eclipse-temurin:26.0.1_8-jre-alpine
 WORKDIR /app
