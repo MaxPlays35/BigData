@@ -1,0 +1,15 @@
+FROM sbtscala/scala-sbt:eclipse-temurin-alpine-25.0.1_8_1.12.11_3.8.3 AS build
+
+WORKDIR /app
+COPY build.sbt .
+COPY project/plugins.sbt project/plugins.sbt
+COPY src src
+COPY common common
+COPY consumer consumer
+COPY producer producer
+RUN sbt consumer/assembly
+
+FROM eclipse-temurin:26.0.1_8-jre-alpine
+WORKDIR /app
+COPY --from=build /app/producer/target/scala-3.3.7/producer.jar /app/producer.jar
+ENTRYPOINT ["java", "-jar", "/app/producer.jar"]

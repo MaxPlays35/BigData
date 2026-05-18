@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./data:/data
+      - ./sql:/docker-entrypoint-initdb.d/
+  broker:
+    image: apache/kafka:4.2.0
+    container_name: broker
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+
+  jobmanager:
+    container_name: jobmanager
+    build:
+      context: .
+      dockerfile: Dockerfile.flink
+    ports:
+      - "8081:8081"
+    command: standalone-job --job-classname main
+    depends_on:
+      broker:
+        condition: service_started
+      kafka-producer:
+        condition: service_completed_successfully
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_TOPIC=csv
+      - KAFKA_CONSUMER_GROUP=flink-job
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        parallelism.default: 1
+  taskmanager:
+    container_name: taskmanager
+    build:
+      context: .
+      dockerfile: Dockerfile.flink
+    command: taskmanager
+    depends_on:
+      jobmanager:
+        condition: service_started
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=broker:29092
+      - KAFKA_TOPIC=csv
+      - KAFKA_CONSUMER_GROUP=flink-job
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        taskmanager.memory.process.size: 1728m
+
+  kafka-producer:
+    container_name: kafka-producer
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: broker:29092
+      KAFKA_TOPIC: csv
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      broker:
+        condition: service_started
