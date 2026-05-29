@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d/
+  broker:
+    image: apache/kafka:4.2.0
+    container_name: broker
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+  nifi:
+    image: apache/nifi:2.9.0
+    container_name: nifi
+    ports:
+      - "8443:8443"
+    environment:
+      # Authentication credentials for single-user mode
+      SINGLE_USER_CREDENTIALS_USERNAME: admin
+      SINGLE_USER_CREDENTIALS_PASSWORD: adminadminadmin
+      # JVM memory settings
+      NIFI_JVM_HEAP_INIT: 1g
+      NIFI_JVM_HEAP_MAX: 2g
+      NIFI_SENSITIVE_PROPS_KEY: "adminadminadmin"
+    volumes:
+      # Persist NiFi state across container restarts
+#      - nifi-conf:/opt/nifi/nifi-current/conf
+#      - nifi-state:/opt/nifi/nifi-current/state
+#      - nifi-db:/opt/nifi/nifi-current/database_repository
+#      - nifi-flowfile:/opt/nifi/nifi-current/flowfile_repository
+#      - nifi-content:/opt/nifi/nifi-current/content_repository
+#      - nifi-provenance:/opt/nifi/nifi-current/provenance_repository
+      # Mount a directory for file-based data ingestion
+      - ./data:/data/input
+      - ./postgresql-42.7.11.jar:/opt/driver/postgresql-42.7.11.jar
+      - ./nifi-conf:/opt/nifi/nifi-current/conf
+#      - ./data/output:/data/output
+  metabase:
+    image: metabase/metabase:v0.61.3.x
+    container_name: metabase
+    volumes:
+      - /dev/urandom:/dev/random:ro
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: postgres
+      MB_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: curl --fail -I http://localhost:3000/api/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
